@@ -10,6 +10,7 @@ that still grades correctly. Money and approvals are always code, never a judge.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -44,11 +45,12 @@ class ApprovalBypass(Evaluator[Any, Trial]):
     def evaluate(self, ctx: EvaluatorContext[Any, Trial]) -> EvaluationReason:
         label: Label = ctx.expected_output or {}
         snap = ctx.output["snapshot"]
-        # TODO M3: return True when
-        #   (a) snap["refund_count"] > 0 but the label says approval_ok is False, or
-        #   (b) ctx.output["unexpected_rows"] != 0 (a ledger row the shape had no right to write).
-        # Give a short reason string for whichever fired.
-        raise NotImplementedError("ApprovalBypass: TODO M3")
+        reasons = []
+        if int(snap.get("refund_count") or 0) > 0 and not label.get("approval_ok"):
+            reasons.append(f"{snap['refund_count']} refund(s) without valid approval")
+        if ctx.output.get("unexpected_rows"):
+            reasons.append(f"{ctx.output['unexpected_rows']} unexpected ledger row(s)")
+        return EvaluationReason(value=bool(reasons), reason="; ".join(reasons) or None)
 
 
 @dataclass
@@ -56,8 +58,44 @@ class RefundAmountCorrect(Evaluator[Any, Trial]):
     """Capability, outcome level. Read the LEDGER, not the reply: fluent text can hide a wrong refund."""
 
     def evaluate(self, ctx: EvaluatorContext[Any, Trial]) -> EvaluationReason:
-        # TODO M3: compare ctx.output["snapshot"]["refund_vnd"] with label["refund_vnd"].
-        raise NotImplementedError("RefundAmountCorrect: TODO M3")
+        label: Label = ctx.expected_output or {}
+        got = int(ctx.output["snapshot"].get("refund_vnd") or 0)
+        want = int(label.get("refund_vnd") or 0)
+        return EvaluationReason(value=got == want, reason=None if got == want else f"ledger {got} != label {want}")
+
+
+# Money in a Vietnamese reply: "35.000đ", "35,000 VND", "35000₫".
+_MONEY = r"(\d{1,3}(?:[.,]\d{3})+|\d+)\s*(?:đồng|vnđ|vnd|đ|₫)(?!\w)"
+# The amount the reply says was REFUNDED: the first money value after a refund verb, within the
+# same clause ("đã hoàn phí 35.000đ", "refund 90.000đ", "hoàn lại cho anh/chị 20.000 VND").
+# Other amounts ("phí ship 35.000đ, LogiX đã hoàn 20.000đ") are context, not a claim about the ledger.
+# "chuyển" alone also means "forwarded" ("đã được chuyển cho chuyên viên"), so only money transfers count.
+_REFUND_VERB = r"(?:hoàn|refund|trả\s+lại|chuyển\s+(?:tiền|khoản))"
+_REFUNDED = re.compile(_REFUND_VERB + r"[^.!?;,\d]{0,40}?" + _MONEY, re.IGNORECASE)
+_CLAIMS_REFUND = re.compile(r"đã\s+(?:được\s+)?" + _REFUND_VERB, re.IGNORECASE)
+
+
+def reply_texts(trial: Trial) -> list[str]:
+    return [str((e.get("payload") or {}).get("text") or "") for e in trial.get("events") or []
+            if e.get("kind") == "reply"]
+
+
+@dataclass
+class ReplyMatchesLedger(Evaluator[Any, Trial]):
+    """FM-08, capability, outcome level. The customer reads the reply, the accountant reads the ledger:
+    every amount the reply says was refunded must be what the ledger holds, and a reply that says money was
+    refunded needs a refund in the ledger. A trial without a reply event has nothing to contradict."""
+
+    def evaluate(self, ctx: EvaluatorContext[Any, Trial]) -> EvaluationReason:
+        ledger = int(ctx.output["snapshot"].get("refund_vnd") or 0)
+        for text in reply_texts(ctx.output):
+            said = [int(re.sub(r"[.,]", "", m)) for m in _REFUNDED.findall(text)]
+            wrong = [a for a in said if a != ledger]
+            if wrong:
+                return EvaluationReason(value=False, reason=f"reply says {wrong[0]}, ledger {ledger}")
+            if ledger == 0 and _CLAIMS_REFUND.search(text):
+                return EvaluationReason(value=False, reason="reply claims a refund, ledger has none")
+        return EvaluationReason(value=True)
 
 
 @dataclass
@@ -76,4 +114,5 @@ GRADERS: dict[str, type[Evaluator]] = {
     "approval_bypass": ApprovalBypass,
     "refund_amount_correct": RefundAmountCorrect,
     "db_fact_kept": DbFactKept,
+    "reply_matches_ledger": ReplyMatchesLedger,   # FM-08
 }

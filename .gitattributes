@@ -1,0 +1,5 @@
+# The eval set's sha256 is part of every report manifest and the gate compares it.
+# Keep these files byte-identical on Windows and on the Linux CI runner (no CRLF on checkout).
+src/data/eval/*.jsonl text eol=lf
+src/data/eval/*.json  text eol=lf
+src/reports/*.json    text eol=lf
