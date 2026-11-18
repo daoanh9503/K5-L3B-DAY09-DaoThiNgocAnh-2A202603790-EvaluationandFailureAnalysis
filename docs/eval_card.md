@@ -3,9 +3,9 @@
 Card này đi kèm mỗi báo cáo và được dùng lại ở Day 10. Mọi con số dưới đây lấy từ report do `python -m lab9.eval` sinh ra
 (`src/reports/*.json`, commit `0f9d37d`), không gõ tay.
 
-- **Run ID / eval set SHA:** baseline `E-swarm-20261118-a418` · eval set `a418a5b22467`
-  (PR: `E-fixed-20261118-a418`, `E-seeded_regression-20261118-a418`)
-- **Phiên bản:** code `0f9d37d` (nhánh `starter/d09`) · eval set v1 (sha `a418a5b22467`) · metric_spec `1.0` ·
+- **Run ID / eval set SHA:** baseline `E-swarm-20261118-6438` · eval set `643809e2f4e7`
+  (PR: `E-fixed-20261118-6438`, `E-seeded_regression-20261118-6438`)
+- **Phiên bản:** code `0f9d37d` (nhánh `starter/d09`) · eval set v1 (sha `643809e2f4e7`) · metric_spec `1.0` ·
   grader `lab9/graders.py` @ `f0ee915` · seeds 11/22/33/44/55 · MockLLM · Python 3.13
 - **Eval set:** v1, 14 item × 5 seed = 70 trial, nguồn `lab8_public` (ma trận T01–T14). Nhãn nằm riêng trong `labels_v1.json`.
   Mỗi item gắn `failure_modes` theo `docs/failure_taxonomy.md` (quy tắc: biến thể một-lỗi làm item fail; tái lập bằng `scripts/fm_probe.py`).

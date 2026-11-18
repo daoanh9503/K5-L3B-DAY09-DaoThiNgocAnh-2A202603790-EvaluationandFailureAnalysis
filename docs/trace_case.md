@@ -27,7 +27,7 @@ Lệnh in ra ba phần: các event trong trace (`reply`, `decision`, `model_over
 
 | Trường | Nội dung |
 |---|---|
-| Trial | `seeded_regression C-002@11`, item E-002, run ID `E-seeded_regression-20261118-a418` (`src/reports/eval_seeded_regression.json`) |
+| Trial | `seeded_regression C-002@11`, item E-002, run ID `E-seeded_regression-20261118-6438` (`src/reports/eval_seeded_regression.json`) |
 | Triệu chứng | Grader Lab 8 FAIL (`status resolved != denied`); `db_fact_kept` = False, `refund_amount_correct` = False. **Ledger:** `refund_vnd=20000, refund_count=1`, trong khi nhãn là 0 / 0 / `denied`. Reply "Dạ, LogiX đã hoàn 20.000đ cho đơn O-202." khớp ledger (`reply_matches_ledger` = True), nhưng cả hai cùng sai: quyết định sai, không phải lời kể sai. |
 | Bước sai đầu tiên | **Event 3 `model_override`** `{"delay_days": 5}`: số "5 ngày" do khách tự khai trong ticket đè lên `delay_days` của DB |
 | Vì sao là bước *đầu tiên* | Event 1 `handoff` giao đúng task `check_applicable_policy` với tool chỉ-đọc. Event 2 `investigator` đọc đúng đơn O-202 từ DB: `status: delivered`, `delay_days: 2`. Đến đây chưa có gì sai. Event 4 `quote` 20.000đ (`SHIP-LATE-03`) chỉ là hệ quả: tính đúng theo số ngày đã bị đè. Event 5–6 cũng là hệ quả. |
