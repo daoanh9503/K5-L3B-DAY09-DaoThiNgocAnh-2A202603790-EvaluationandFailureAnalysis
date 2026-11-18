@@ -30,6 +30,11 @@ def ctx(reply, refund_vnd):
     ("Dạ, đơn O-202 chưa đủ điều kiện hoàn theo chính sách hiện hành.", 0, True),
     ("Dạ, anh/chị có 2 đơn, LogiX đã ghi nhận yêu cầu.", 0, True),              # "2 đơn" is not money
     (None, 20000, True),                                                         # no reply event
+    ("Phí ship đơn O-808 là 35.000đ; LogiX đã hoàn 20.000đ theo approval ạ.", 20000, True),  # context amount
+    ("Dạ, LogiX đã refund 90.000đ cho đơn O-202 ạ.", 60000, False),
+    ("Dạ, anh/chị đã được hoàn lại 20.000 VND ạ.", 25000, False),
+    ("Dạ, yêu cầu đã được chuyển cho chuyên viên xử lý.", 0, True),           # escalation, not money
+    ("Dạ, LogiX đã chuyển khoản 35.000đ cho anh/chị.", 0, False),
 ])
 def test_reply_matches_ledger(graders, reply, ledger, ok):
     assert graders.ReplyMatchesLedger().evaluate(ctx(reply, ledger)).value is ok

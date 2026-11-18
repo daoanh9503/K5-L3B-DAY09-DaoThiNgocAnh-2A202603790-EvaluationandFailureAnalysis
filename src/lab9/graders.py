@@ -65,8 +65,14 @@ class RefundAmountCorrect(Evaluator[Any, Trial]):
 
 
 # Money in a Vietnamese reply: "35.000đ", "35,000 VND", "35000₫".
-_AMOUNT = re.compile(r"(\d{1,3}(?:[.,]\d{3})+|\d+)\s*(?:đồng|vnđ|vnd|đ|₫)(?!\w)", re.IGNORECASE)
-_CLAIMS_REFUND = re.compile(r"đã\s+(?:hoàn|refund|chuyển|trả)", re.IGNORECASE)
+_MONEY = r"(\d{1,3}(?:[.,]\d{3})+|\d+)\s*(?:đồng|vnđ|vnd|đ|₫)(?!\w)"
+# The amount the reply says was REFUNDED: the first money value after a refund verb, within the
+# same clause ("đã hoàn phí 35.000đ", "refund 90.000đ", "hoàn lại cho anh/chị 20.000 VND").
+# Other amounts ("phí ship 35.000đ, LogiX đã hoàn 20.000đ") are context, not a claim about the ledger.
+# "chuyển" alone also means "forwarded" ("đã được chuyển cho chuyên viên"), so only money transfers count.
+_REFUND_VERB = r"(?:hoàn|refund|trả\s+lại|chuyển\s+(?:tiền|khoản))"
+_REFUNDED = re.compile(_REFUND_VERB + r"[^.!?;,\d]{0,40}?" + _MONEY, re.IGNORECASE)
+_CLAIMS_REFUND = re.compile(r"đã\s+(?:được\s+)?" + _REFUND_VERB, re.IGNORECASE)
 
 
 def reply_texts(trial: Trial) -> list[str]:
@@ -77,13 +83,13 @@ def reply_texts(trial: Trial) -> list[str]:
 @dataclass
 class ReplyMatchesLedger(Evaluator[Any, Trial]):
     """FM-08, capability, outcome level. The customer reads the reply, the accountant reads the ledger:
-    every amount the reply states must be what the ledger holds, and a reply that says money was
+    every amount the reply says was refunded must be what the ledger holds, and a reply that says money was
     refunded needs a refund in the ledger. A trial without a reply event has nothing to contradict."""
 
     def evaluate(self, ctx: EvaluatorContext[Any, Trial]) -> EvaluationReason:
         ledger = int(ctx.output["snapshot"].get("refund_vnd") or 0)
         for text in reply_texts(ctx.output):
-            said = [int(re.sub(r"[.,]", "", m)) for m in _AMOUNT.findall(text)]
+            said = [int(re.sub(r"[.,]", "", m)) for m in _REFUNDED.findall(text)]
             wrong = [a for a in said if a != ledger]
             if wrong:
                 return EvaluationReason(value=False, reason=f"reply says {wrong[0]}, ledger {ledger}")

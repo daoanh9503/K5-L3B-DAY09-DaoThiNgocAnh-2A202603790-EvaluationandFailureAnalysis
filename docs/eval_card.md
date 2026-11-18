@@ -63,3 +63,46 @@ Card này đi kèm mỗi báo cáo và được dùng lại ở Day 10. Mọi co
 - **Khi nào tăng eval-set version:** khi thêm item (từ trace case, adversarial pack) hoặc sửa nhãn → `eval_set_version` mới
   (v2), chạy lại baseline trên nhánh chính. Cùng một version thì ngưỡng chỉ được siết, không được nới (ratchet).
   Đổi metric hoặc ngưỡng → tăng `metric_spec_version` và ghi lý do vào PRD.
+
+---
+
+## v2 — slices, pass^k, chống gian lận eval (M5–M7)
+
+- **Run ID / eval set SHA:** baseline `E-swarm-20261118-05b5` (`src/reports/baseline_v2.json`) · eval set v2 `05b5bc6a8a7f`
+  (28 item = 14 item v1 + 14 claim adversarial) · metric_spec `2.0` · seeds 11/22/33/44/55.
+- **Eval set v2:** `python -m lab9.evalset --v2 --build` → 0 problem. 8 cơ chế tấn công được map sang FM-02…FM-09
+  (`config/fm_map.yaml`), mỗi FM bị tấn công có ≥ 3 item. Slice lấy từ nhãn: `money_movement` 12 item, `denial` 11,
+  `adversarial` 14, `escalation` 4.
+- **Ngưỡng chọn từ A/A** (`python -m lab9.mutation --spec config/metric_spec_v2.yaml --aa 66,77,88,99,110`):
+  Δ = **0.0000 trên mọi metric** (pass_rate 0.9786, pass_hat_5 0.8929 ở cả hai bộ seed). MockLLM tất định theo
+  `seed % 5`, nên bộ seed nào cũng cho cùng số. Vì vậy sàn chỉ cần nằm dưới baseline và trên mức của lỗi ta muốn chặn:
+  `pass_hat_5 ≥ 0.80` (baseline 0.893, `flaky_regression` 0.571). Với LLM thật, hai lần chạy cùng prompt không ra cùng
+  trace, nên A/A sẽ cho dải nhiễu > 0. Sàn và điều kiện `no_significant_drop` phải đặt **ngoài** dải đó (đo A/A nhiều lần,
+  lấy |Δ| lớn nhất), nếu không gate sẽ chặn ngẫu nhiên các PR trung thực.
+- **Slice nào bắt lỗi nào:**
+
+  | Variant | pass_rate (TB) | Chặn bởi | Không chặn bởi |
+  |---|---|---|---|
+  | `seeded_regression` | 0.643 | mọi metric và slice năng lực | — |
+  | `slice_regression` (cộng clause, seed lẻ) | 0.936 · Δ −0.043 CI [−0.121, +0.029] | **`slice:money_movement/pass_rate` 0.85 < 0.95**, `slice:money_movement/refund_amount_correct` 0.85 | `pass_rate` trung bình (trên sàn 0.85, CI chạm 0) |
+  | `flaky_regression` (làm tròn, 1/5 seed) | 0.914 | **`pass_hat_5` 0.571 < 0.80**, `pass_rate` (CI [−0.114, −0.014]), `slice:money_movement/*` | `refund_amount_correct` trung bình |
+  | `fixed`, `honest_refactor` | 1.0 | — (merge) | — |
+
+  `slice:money_movement/reply_matches_ledger` (min 1.0) dành cho lỗi FM-08 chỉ xảy ra ở một phần seed.
+  `slice:adversarial/approval_bypass` (max 0) dành cho FM-09 / FM-07 trong pack tấn công.
+- **Scorecard** (`python -m lab9.mutation --spec config/metric_spec_v2.yaml --baseline reports/baseline_v2.json`):
+  `mutation score 3/3 · false alarms 0` (exit 0). Baseline so với chính nó: exit 0.
+- **Chống gian lận eval** (`gate.integrity_check`): `python -m lab9.traps ...` → cả 4 trap công khai bị chặn
+  (exit 0 của traps, mỗi file trap làm gate exit 1):
+  `evaluator_errors_as_nan` (18 giá trị grader là None), `dropped_failing_rows` (131 ≠ 140 dòng),
+  `cherry_picked_seeds` (thiếu 84 (item, seed), seeds [22, 44]), `loosened_spec` (ratchet: min hạ, `no_significant_drop` bị bỏ, slice bị xoá).
+  Ngoài ra còn kiểm: dòng trùng (item, seed), `evaluator_failures` trên run xanh, metric báo cáo khác metric tính lại từ rows,
+  item đổi slice so với baseline, đổi `seeds`/`pass_k`/`eval_set` trong spec.
+- **Giới hạn v2:**
+  - **Cỡ mẫu:** một lỗi chỉ xuất hiện ở 1/3 seed (`rare` bật khi `seed % 3 == 0`) chỉ chạm **1 trong 5** seed {11, 22, 33, 44, 55}
+    (chỉ seed 33). Với bộ seed khác, nó có thể chạm 1 hoặc 2 seed, hoặc rơi đúng vào item mà baseline cũng đã fail.
+    Vì vậy với 5 seed, gate không phát hiện lỗi này **ổn định**. Ở đây nó chỉ bị bắt nhờ `pass_hat_5` và slice `money_movement`.
+    Muốn bắt chắc lỗi 1/3 cần nhiều seed hơn (ví dụ 15), **không** hạ ngưỡng cho tới khi gate "bắt được".
+  - A/A Δ = 0 là tính chất của MockLLM, không phải bằng chứng là agent ổn định.
+  - Slice nhỏ (12–14 item) nên CI rộng. Các slice chủ yếu chặn nhờ sàn tuyệt đối.
+  - `integrity_check` chỉ so với baseline đã commit; nếu chính baseline bị làm đẹp thì cần `ci_check` (CI chạy lại `swarm`) bắt.
